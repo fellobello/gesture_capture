@@ -1,0 +1,7 @@
+bazel-*
+*.bazelrc
+build/
+*.o
+*.exe
+*.log
+
