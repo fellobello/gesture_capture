@@ -1,1 +1,7 @@
-/home/steven/gesture_capture_lib/.gitignore
+bazel-*
+*.bazelrc
+build/
+*.o
+*.exe
+*.log
+
