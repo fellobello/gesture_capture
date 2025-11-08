@@ -1,5 +1,4 @@
-#ifndef IMAGE_H
-#define IMAGE_H
+#pragma once
 
 #include <cstdint>
 #include <vector>
@@ -18,6 +17,3 @@ struct Image {
 };
 
 } // namespace utils
-
-#endif // IMAGE_H
-

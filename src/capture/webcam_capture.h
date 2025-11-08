@@ -1,5 +1,4 @@
-#ifndef WEBCAM_CAPTURE_H
-#define WEBCAM_CAPTURE_H
+#pragma once
 
 #include <vector>
 #include <string>
@@ -33,6 +32,3 @@ private:
 };
 
 } // namespace capture
-
-#endif // WEBCAM_CAPTURE_H
-

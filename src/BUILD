@@ -1,46 +1,50 @@
 cc_library(
     name = "gesture_capture",
     srcs = [
-        "gesture_capture.cpp",
         "capture/webcam_capture.cpp",
+        "gesture_capture.cpp",
+        "keypoints/contour.cpp",
+        "utils/filters.cpp",
         "utils/image.cpp",
         "utils/image_utils.cpp",
-        "imageproc/filters.cpp",
-        "keypoints/contour.cpp",
     ],
     hdrs = [
-        "gesture_capture.h",
         "capture/webcam_capture.h",
+        "gesture_capture.h",
+        "keypoints/contour.h",
+        "utils/filters.h",
         "utils/image.h",
         "utils/image_utils.h",
-        "imageproc/filters.h",
-        "keypoints/contour.h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wall",
+        "-Werror",
+        "-Wextra",
     ],
     includes = [
         ".",
         "capture",
-        "utils",
-        "imageproc",
         "keypoints",
+        "utils",
     ],
-    copts = ["-std=c++20", "-Wall", "-Werror", "-Wextra"],
     visibility = ["//visibility:public"],
 )
 
 cc_binary(
     name = "gesture_app",
     srcs = ["main.cpp"],
-    deps = [":gesture_capture"],
+    copts = [
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-I/usr/include/opencv4",
+    ],
     includes = [
         ".",  # allow includes relative to src/
         "capture",
-        "utils",
-        "imageproc",
         "keypoints",
-    ],
-    copts = [
-        "-std=c++20", "-Wall", "-Wextra",
-        "-I/usr/include/opencv4",
+        "utils",
     ],
     linkopts = [
         "-lopencv_core",
@@ -48,4 +52,5 @@ cc_binary(
         "-lopencv_imgproc",
         "-lopencv_videoio",
     ],
+    deps = [":gesture_capture"],
 )

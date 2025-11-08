@@ -1,5 +1,5 @@
 #include "capture/webcam_capture.h"
-#include "imageproc/filters.h"
+#include "utils/filters.h"
 #include "keypoints/contour.h"
 #include "utils/image.h"
 #include "utils/image_utils.h"
@@ -16,7 +16,7 @@ cv::Mat image_to_mat(const utils::Image& img) {
 }
 
 int main() {
-    bool debug_view = true; // set to true for blurred grayscale view, false for color
+    bool debug_view = false; // set to true for blurred grayscale view, false for color
 
     capture::WebcamCapture webcam("/dev/video0");
     if (!webcam.open_device()) {

@@ -17,4 +17,3 @@ bool Image::save_to_ppm(const std::string& filename) const {
 }
 
 } // namespace utils
-
