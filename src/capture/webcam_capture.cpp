@@ -121,8 +121,8 @@ std::optional<utils::Image> WebcamCapture::capture_frame() {
             return {(uint8_t)r, (uint8_t)g, (uint8_t)b};
         };
         auto rgb0 = conv(y0, u, v); auto rgb1 = conv(y1, u, v);
-        img.data[j] = rgb0[0]; img.data[j+1] = rgb0[1]; img.data[j+2] = rgb0[2];
-        img.data[j+3] = rgb1[0]; img.data[j+4] = rgb1[1]; img.data[j+5] = rgb1[2];
+        img.data[j] = rgb0[2]; img.data[j+1] = rgb0[1]; img.data[j+2] = rgb0[0];
+        img.data[j+3] = rgb1[2]; img.data[j+4] = rgb1[1]; img.data[j+5] = rgb1[0];
     }
     if (ioctl(fd_, VIDIOC_QBUF, &buf) < 0) { perror("qbuf2"); }
     return img;

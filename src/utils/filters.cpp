@@ -51,43 +51,80 @@ void sobel_edge(const utils::Image& input, utils::Image& output) {
     }
 }
 
-// fast separable box blur (single-channel)
-void box_blur_separable(const utils::Image& input, utils::Image& output, int kernel_size) {
-    int w = input.width, h = input.height;
+// fast separable box blur (3-channel)
+void box_blur(const utils::Image& input, utils::Image& output, int kernel_size) {
+    int w = input.width;
+    int h = input.height;
+    int channels = input.channels; // will be 3
     int half = kernel_size / 2;
-    std::vector<uint8_t> temp(w * h, 0);
 
-    // horizontal blur
+    // temp buffer now needs to be 3-channel
+    std::vector<uint8_t> temp(w * h * channels, 0);
+
+    // horizontal blur (per channel)
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int sum = 0;
-            int count = 0;
-            for (int k = -half; k <= half; ++k) {
-                int xi = x + k;
-                if (xi >= 0 && xi < w) {
-                    sum += input.data[y * w + xi];
-                    count++;
+            for (int c = 0; c < channels; ++c) { // loop for b, g, r
+                int sum = 0;
+                int count = 0;
+                for (int k = -half; k <= half; ++k) {
+                    int xi = x + k;
+                    if (xi >= 0 && xi < w) {
+                        sum += input.data[(y * w + xi) * channels + c];
+                        count++;
+                    }
                 }
+                temp[(y * w + x) * channels + c] = sum / count;
             }
-            temp[y * w + x] = sum / count;
         }
     }
-    // vertical blur
+    // vertical blur (per channel)
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int sum = 0;
-            int count = 0;
-            for (int k = -half; k <= half; ++k) {
-                int yi = y + k;
-                if (yi >= 0 && yi < h) {
-                    sum += temp[yi * w + x];
-                    count++;
+            for (int c = 0; c < channels; ++c) { // loop for b, g, r
+                int sum = 0;
+                int count = 0;
+                for (int k = -half; k <= half; ++k) {
+                    int yi = y + k;
+                    if (yi >= 0 && yi < h) {
+                        sum += temp[(yi * w + x) * channels + c];
+                        count++;
+                    }
                 }
+                output.data[(y * w + x) * channels + c] = sum / count;
             }
-            output.data[y * w + x] = sum / count;
         }
     }
 }
+
+void skin(const utils::Image& input, utils::Image& output) {
+    int w = input.width, h = input.height;
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int idx = (y * w + x) * 3;
+            uint8_t r = input.data[idx + 2], g = input.data[idx + 1], b = input.data[idx];
+
+            // RGB to HSV conversion
+            float rf = r / 255.f, gf = g / 255.f, bf = b / 255.f;
+            float maxc = std::max({rf, gf, bf}), minc = std::min({rf, gf, bf});
+            float delta = maxc - minc;
+
+            float h_val = 0.f, s_val = maxc == 0 ? 0 : delta / maxc, v_val = maxc;
+
+            if (delta != 0) {
+                if (maxc == rf) h_val = 60 * ((gf - bf) / delta);
+                else if (maxc == gf) h_val = 60 * (2 + (bf - rf) / delta);
+                else h_val = 60 * (4 + (rf - gf) / delta);
+                if (h_val < 0) h_val += 360;
+            }
+
+			bool skin_pixel = ((h_val >= 295 && h_val <= 360) || (h_val >= 10 && h_val <= 50)) && (s_val >= 0.15f) && (v_val >= 0.10f);
+            output.data[y * w + x] = skin_pixel ? 255 : 0;
+        }
+    }
+}
+
 
 // generic convolution
 void convolve(const utils::Image& input, utils::Image& output, const std::vector<int>& kernel, int ksize, int divisor, int offset) {
