@@ -13,6 +13,7 @@ cc_library(
         "capture/webcam_capture.h",
         "gesture_capture.h",
         "keypoints/contour.h",
+        "params.h",
         "utils/filters.h",
         "utils/geometry.h",
         "utils/image.h",
@@ -21,9 +22,10 @@ cc_library(
     copts = [
         "-std=c++20",
         "-I/usr/include/opencv4",
+        "-Wno-deprecated-enum-enum-conversion",
     ],
     includes = [
-        ".",
+        ".",  # allow includes relative to src/
         "capture",
         "keypoints",
         "utils",

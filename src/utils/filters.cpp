@@ -1,4 +1,5 @@
 #include "filters.h"
+#include "params.h"
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -10,12 +11,16 @@ void grayscale(const utils::Image& input, utils::Image& output) {
     int h = input.height;
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int idx = (y * w + x) * 3;
+            int idx = (y * w + x) * params::color_channel_count;
             uint8_t r = input.data[idx];
             uint8_t g = input.data[idx + 1];
             uint8_t b = input.data[idx + 2];
             // integer approximation of luminosity
-            output.data[y * w + x] = (r * 299 + g * 587 + b * 114) / 1000;
+            output.data[y * w + x] = (
+                r * params::grayscale_weight_r +
+                g * params::grayscale_weight_g +
+                b * params::grayscale_weight_b
+            ) / params::grayscale_divisor;
         }
     }
 }
@@ -45,7 +50,7 @@ void sobel_edge(const utils::Image& input, utils::Image& output) {
                     gy += input.data[py * w + px] * ky[j][i];
                 }
             }
-            int mag = std::min(255, static_cast<int>(std::sqrt(gx * gx + gy * gy)));
+            int mag = std::min(static_cast<int>(params::mask_value_on), static_cast<int>(std::sqrt(gx * gx + gy * gy)));
             output.data[y * w + x] = static_cast<uint8_t>(mag);
         }
     }
@@ -55,7 +60,7 @@ void sobel_edge(const utils::Image& input, utils::Image& output) {
 void box_blur(const utils::Image& input, utils::Image& output, int kernel_size) {
     int w = input.width;
     int h = input.height;
-    int channels = input.channels; // will be 3
+    int channels = input.channels; // will be params::color_channel_count
     int half = kernel_size / 2;
 
     // temp buffer now needs to be 3-channel
@@ -102,7 +107,7 @@ void skin(const utils::Image& input, utils::Image& output) {
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int idx = (y * w + x) * 3;
+            int idx = (y * w + x) * params::color_channel_count;
             uint8_t r = input.data[idx + 2], g = input.data[idx + 1], b = input.data[idx];
 
             // RGB to HSV conversion
@@ -119,12 +124,16 @@ void skin(const utils::Image& input, utils::Image& output) {
                 if (h_val < 0) h_val += 360;
             }
 
-			bool skin_pixel = ((h_val >= 295 && h_val <= 360) || (h_val >= 10 && h_val <= 50)) && (s_val >= 0.15f) && (v_val >= 0.10f);
-            output.data[y * w + x] = skin_pixel ? 255 : 0;
+            bool skin_pixel = (
+                ((h_val >= params::skin_hue_low1 && h_val <= params::skin_hue_high1) ||
+                 (h_val >= params::skin_hue_low2 && h_val <= params::skin_hue_high2))
+                 && (s_val >= params::skin_min_s)
+                 && (v_val >= params::skin_min_v)
+            );
+            output.data[y * w + x] = skin_pixel ? params::mask_value_on : params::mask_value_off;
         }
     }
 }
-
 
 // generic convolution
 void convolve(const utils::Image& input, utils::Image& output, const std::vector<int>& kernel, int ksize, int divisor, int offset) {
@@ -142,7 +151,8 @@ void convolve(const utils::Image& input, utils::Image& output, const std::vector
                 }
             }
             int v = sum / divisor + offset;
-            output.data[y * w + x] = std::clamp(v, 0, 255);
+            output.data[y * w + x] = static_cast<uint8_t>(
+    std::clamp(v, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on)));
         }
     }
 }

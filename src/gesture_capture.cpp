@@ -2,13 +2,14 @@
 #include "utils/filters.h"
 #include "keypoints/contour.h"
 #include "utils/image_utils.h"
+#include "params.h"
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <iterator>
-#include <opencv2/highgui.hpp> // for cv::imshow
+#include <opencv2/highgui.hpp>
 
 cv::Mat image_to_mat(const utils::Image& img) {
     if (img.channels == 1)
@@ -21,14 +22,14 @@ cv::Mat image_to_mat(const utils::Image& img) {
 GestureCapture::GestureCapture(const std::string& device, bool debug)
     : debug_view{debug},
       webcam{device},
-      skin_mask{640, 480, 1},
-      blurred{640, 480, 3},
-      edges{640, 480, 1},
-      binary{640, 480, 1},
-      prev_rgb{640, 480, 3},
-      motion_mask{640, 480, 1},
-      motion_history_mask{640, 480, 1},
-      final_mask{640, 480, 1},
+      skin_mask{params::cap_width, params::cap_height, 1},
+      blurred{params::cap_width, params::cap_height, 3},
+      edges{params::cap_width, params::cap_height, 1},
+      binary{params::cap_width, params::cap_height, 1},
+      prev_rgb{params::cap_width, params::cap_height, 3},
+      motion_mask{params::cap_width, params::cap_height, 1},
+      motion_history_mask{params::cap_width, params::cap_height, 1},
+      final_mask{params::cap_width, params::cap_height, 1},
       first_frame{true} {}
 
 GestureCapture::~GestureCapture() = default;
@@ -53,24 +54,28 @@ void create_motion_mask(const utils::Image& current,
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            int idx_3c = (y * w + x) * 3;
+            int idx_3c = (y * w + x) * params::color_channel_count;
             int idx_1c = y * w + x;
 
             // get current pixel and convert to grayscale (luma)
             uint8_t b_curr = current.data[idx_3c];
             uint8_t g_curr = current.data[idx_3c + 1];
             uint8_t r_curr = current.data[idx_3c + 2];
-            float gray_curr = 0.114f * b_curr + 0.587f * g_curr + 0.299f * r_curr;
+            float gray_curr = params::grayscale_weight_b_f * b_curr +
+                              params::grayscale_weight_g_f * g_curr +
+                              params::grayscale_weight_r_f * r_curr;
 
             // get previous pixel and convert to grayscale
             uint8_t b_prev = previous.data[idx_3c];
             uint8_t g_prev = previous.data[idx_3c + 1];
             uint8_t r_prev = previous.data[idx_3c + 2];
-            float gray_prev = 0.114f * b_prev + 0.587f * g_prev + 0.299f * r_prev;
+            float gray_prev = params::grayscale_weight_b_f * b_prev +
+                              params::grayscale_weight_g_f * g_prev +
+                              params::grayscale_weight_r_f * r_prev;
 
             // diff and threshold
             int diff = static_cast<int>(std::abs(gray_curr - gray_prev));
-            output_mask.data[idx_1c] = (diff > threshold_val) ? 255 : 0;
+            output_mask.data[idx_1c] = (diff > threshold_val) ? params::mask_value_on : params::mask_value_off;
         }
     }
 }
@@ -85,15 +90,15 @@ void update_motion_history(const utils::Image& motion_mask,
     const uint8_t* motion_ptr = motion_mask.data.data();
 
     for (size_t i = 0; i < num_pixels; ++i) {
-        if (*motion_ptr++ == 255) {
+        if (*motion_ptr++ == params::mask_value_on) {
             // motion detected, reset to full brightness
-            *history_ptr = 255;
+            *history_ptr = params::mask_value_on;
         } else {
             // no motion, decay the existing value
             if (*history_ptr > decay_speed) {
                 *history_ptr -= decay_speed;
             } else {
-                *history_ptr = 0;
+                *history_ptr = params::mask_value_off;
             }
         }
         history_ptr++;
@@ -116,7 +121,7 @@ void GestureCapture::show_debug_view(const utils::Image& image_1c,
                                    const std::string& window_name)
 {
     // create 3-channel version of mask to draw color rectangles
-    utils::Image display_image(image_1c.width, image_1c.height, 3);
+    utils::Image display_image(image_1c.width, image_1c.height, params::color_channel_count);
 
     auto* in_ptr = image_1c.data.data();
     auto* out_ptr = display_image.data.data();
@@ -152,18 +157,18 @@ void GestureCapture::run() {
             continue;
         }
         // blur
-        box_blur(rgb, blurred, 5);
+        box_blur(rgb, blurred, params::blur_kernel_size);
         // skin mask
         skin(blurred, skin_mask);
         // motion mask
-        create_motion_mask(blurred, prev_rgb, motion_mask, 25);
-        update_motion_history(motion_mask, motion_history_mask, 10);
+        create_motion_mask(blurred, prev_rgb, motion_mask, params::motion_mask_threshold);
+        update_motion_history(motion_mask, motion_history_mask, params::motion_history_decay);
         // combine skin and motion
         std::transform(skin_mask.data.begin(), skin_mask.data.end(),
                        motion_history_mask.data.begin(),
                        final_mask.data.begin(),
                        [](uint8_t skin, uint8_t history) {
-                           return (history > 0) ? skin : 0;
+                           return (history > params::mask_value_off) ? skin : params::mask_value_off;
                        }
         );
         // find contours
@@ -176,7 +181,8 @@ void GestureCapture::run() {
         }
         // draw filtered contours
         for (const auto& contour : hand_contours) {
-            draw_polygon(rgb, contour, 0, 255, 0);
+            draw_polygon(rgb, contour, params::mask_value_off,
+                         params::mask_value_on, params::mask_value_off);
         }
         // display
         if (!debug_view) {
@@ -184,20 +190,21 @@ void GestureCapture::run() {
             cv::imshow("live webcam", mat);
         } else {
             utils::Image debug_img = final_mask;
-            utils::Image debug_color_img(debug_img.width, debug_img.height, 3);
+            utils::Image debug_color_img(debug_img.width, debug_img.height, params::color_channel_count);
             for (int i = 0; i < debug_img.width * debug_img.height; ++i) {
                 uint8_t val = debug_img.data[i];
-                debug_color_img.data[i * 3] = val;
-                debug_color_img.data[i * 3 + 1] = val;
-                debug_color_img.data[i * 3 + 2] = val;
+                debug_color_img.data[i * params::color_channel_count] = val;
+                debug_color_img.data[i * params::color_channel_count + 1] = val;
+                debug_color_img.data[i * params::color_channel_count + 2] = val;
             }
             for (const auto& contour : hand_contours) {
-                draw_polygon(debug_color_img, contour, 0, 255, 0);
+                draw_polygon(debug_color_img, contour, params::mask_value_off,
+                             params::mask_value_on, params::mask_value_off);
             }
             cv::Mat mat = image_to_mat(debug_color_img);
             cv::imshow("final mask", mat);
         }
-        switch (cv::waitKey(10)) {
+        switch (cv::waitKey(params::window_delay_ms)) {
             case 27: running = false; break;
             case 'd': debug_view = !debug_view; break;
         }

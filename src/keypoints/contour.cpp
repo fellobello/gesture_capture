@@ -1,5 +1,6 @@
 #include "contour.h"
 #include "utils/geometry.h"
+#include "params.h"
 #include <vector>
 #include <queue>
 
@@ -12,21 +13,21 @@ std::vector<BoundingBox> find_bounding_boxes(const utils::Image& binary) {
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            if (binary.data[y * w + x] == 0 || visited[y][x]) continue;
+            if (binary.data[y * w + x] == params::mask_value_off || visited[y][x]) continue;
             int min_x = x, max_x = x, min_y = y, max_y = y;
             std::queue<std::pair<int, int>> q;
             q.push({x, y});
             visited[y][x] = true;
 
             // flood fill to group all connected pixels in the blob
-            while (!q.empty()) {
+            for(; !q.empty(); ) {
                 auto [cx, cy] = q.front(); q.pop();
                 for (int dx = -1; dx <= 1; ++dx) {
                     for (int dy = -1; dy <= 1; ++dy) {
                         if (dx == 0 && dy == 0) continue;
                         int nx = cx + dx, ny = cy + dy;
                         if (nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[ny][nx]
-                            && binary.data[ny * w + nx] != 0) {
+                            && binary.data[ny * w + nx] != params::mask_value_off) {
                             visited[ny][nx] = true;
                             q.push({nx, ny});
                             // track bounding box
@@ -34,7 +35,7 @@ std::vector<BoundingBox> find_bounding_boxes(const utils::Image& binary) {
                             max_x = std::max(max_x, nx);
                             min_y = std::min(min_y, ny);
                             max_y = std::max(max_y, ny);
-                            }
+                        }
                     }
                 }
             }
@@ -56,7 +57,7 @@ std::vector<std::vector<std::pair<int, int>>> find_contours(const utils::Image& 
 
     for (int y = 1; y < h - 1; ++y) {
         for (int x = 1; x < w - 1; ++x) {
-            if (binary.data[y*w + x] == 0 || visited[y][x]) continue;
+            if (binary.data[y*w + x] == params::mask_value_off || visited[y][x]) continue;
 
             // find border pixel (first 'on' pixel of a blob)
             std::vector<std::pair<int, int>> contour;
@@ -73,10 +74,10 @@ std::vector<std::vector<std::pair<int, int>>> find_contours(const utils::Image& 
                     int nx = cx + dx[(dir + k) % 8];
                     int ny = cy + dy[(dir + k) % 8];
                     if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
-                        binary.data[ny * w + nx] != 0 && !visited[ny][nx]) {
+                        binary.data[ny * w + nx] != params::mask_value_off && !visited[ny][nx]) {
                         found = (dir + k) % 8;
                         break;
-                        }
+                    }
                 }
                 if (found != -1) {
                     cx += dx[found];
@@ -90,7 +91,7 @@ std::vector<std::vector<std::pair<int, int>>> find_contours(const utils::Image& 
                     closed = true;
             } while (!closed);
 
-            if (contour.size() > 4) // discard small noise
+            if (contour.size() >= params::min_contour_points) // discard small noise
                 contours.push_back(contour);
         }
     }
@@ -100,8 +101,10 @@ std::vector<std::vector<std::pair<int, int>>> find_contours(const utils::Image& 
 bool is_hand_candidate(const std::vector<std::pair<int,int>>& pts) {
     float area = polygon_area(pts);
     float ar = aspect_ratio(pts);
-    if(area < 5000 || area > 50000) return false;
-    if(ar < 0.4 || ar > 2.5) return false;
+    if(area < params::min_hand_area || area > params::max_hand_area)
+        return false;
+    if(ar < params::min_aspect || ar > params::max_aspect)
+        return false;
     // add more tests here if desired (solidity, convex hull, etc)
     return true;
 }

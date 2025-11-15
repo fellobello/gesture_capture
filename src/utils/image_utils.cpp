@@ -1,12 +1,12 @@
 #include "image_utils.h"
+#include "params.h"
 #include <cmath>
 
 void draw_rectangle(utils::Image& img, const BoundingBox& box, uint8_t r, uint8_t g, uint8_t b) {
     int w = img.width, h = img.height;
     int x1 = box.x, y1 = box.y, x2 = box.x + box.w - 1, y2 = box.y + box.h - 1;
-    const int MIN_AREA = 8000;
 
-    if(w*h > MIN_AREA) {
+    if(w*h > params::min_draw_rect_area) {
         // draw top and bottom lines
         for (int x = x1; x <= x2; ++x) {
             if (y1 >= 0 && y1 < h) {

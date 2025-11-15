@@ -1,4 +1,5 @@
 #include "gesture_capture.h"
+#include <iostream>
 
 int main() {
     GestureCapture gc("/dev/video0", false);
