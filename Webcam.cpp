@@ -4,6 +4,7 @@
 
 #include "Webcam.h"
 #include "Params.h"
+#include "Image_utils.h"
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
@@ -12,8 +13,6 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
-#include <array>
-#include <algorithm>
 #include <optional>
 
 Webcam::Webcam(const std::string& device_path){
@@ -117,26 +116,8 @@ std::optional<Image> Webcam::capture() {
     if (ioctl(fd_, VIDIOC_DQBUF, &buf) < 0) { perror("dqbuf"); return std::nullopt; }
     int buf_idx = static_cast<int>(buf.index);
 
-    const auto* yuyv = (const unsigned char*)buffers_[buf_idx].start;
-    Image img(width_, height_, params::color_channel_count);
-    for (int i = 0, j = 0; i < width_ * height_ * 2; i += 4, j += 6) {
-        int y0 = yuyv[i], u = yuyv[i + 1], y1 = yuyv[i + 2], v = yuyv[i + 3];
-        auto conv = [](int y, int u, int v) -> std::array<uint8_t, 3> {
-            int c = y - 16, d = u - 128, e = v - 128;
-            int r = std::clamp((298 * c + 409 * e + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
-            int g = std::clamp((298 * c - 100 * d - 208 * e + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
-            int b = std::clamp((298 * c + 516 * d + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
-            return {(uint8_t)b, (uint8_t)g, (uint8_t)r};
-        };
-        auto bgr0 = conv(y0, u, v);
-        auto bgr1 = conv(y1, u, v);
-        img.data[j] = bgr0[0];
-        img.data[j + 1] = bgr0[1];
-        img.data[j + 2] = bgr0[2];
-        img.data[j + 3] = bgr1[0];
-        img.data[j + 4] = bgr1[1];
-        img.data[j + 5] = bgr1[2];
-    }
+    const auto* yuyv = static_cast<const uint8_t*>(buffers_[buf_idx].start);
+    Image img = yuyv_to_bgr(yuyv, width_, height_);
     if (ioctl(fd_, VIDIOC_QBUF, &buf) < 0) { perror("qbuf2"); }
     return img;
 }

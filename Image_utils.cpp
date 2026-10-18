@@ -4,34 +4,41 @@
 
 #include "Image_utils.h"
 #include "Params.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdlib>
 #include <queue>
 
 void draw_rect(Image& img, const BoundingBox& box, uint8_t r, uint8_t g, uint8_t b) {
     int w = img.width, h = img.height;
     int x1 = box.x, y1 = box.y, x2 = box.x + box.w - 1, y2 = box.y + box.h - 1;
 
-    if(w*h > params::min_draw_rect_area) {
-        // draw top and bottom lines
-        for (int x = x1; x <= x2; ++x) {
-            if (y1 >= 0 && y1 < h) {
-                int idx = (y1 * w + x) * 3;
-                img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b;
-            }
-            if (y2 >= 0 && y2 < h) {
-                int idx = (y2 * w + x) * 3;
-                img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b;
-            }
+    // skip small boxes (noise); clamp the line spans so boxes at the edge stay in bounds
+    if (box.w * box.h < params::min_draw_rect_area) return;
+    int xa = std::max(x1, 0), xb = std::min(x2, w - 1);
+    int ya = std::max(y1, 0), yb = std::min(y2, h - 1);
+
+    // draw top and bottom lines
+    for (int x = xa; x <= xb; ++x) {
+        if (y1 >= 0 && y1 < h) {
+            int idx = (y1 * w + x) * 3;
+            img.data[idx] = b; img.data[idx+1] = g; img.data[idx+2] = r;
         }
-        // draw left and right lines
-        for (int y = y1; y <= y2; ++y) {
-            if (x1 >= 0 && x1 < w) {
-                int idx = (y * w + x1) * 3;
-                img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b;
-            }
-            if (x2 >= 0 && x2 < w) {
-                int idx = (y * w + x2) * 3;
-                img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b;
-            }
+        if (y2 >= 0 && y2 < h) {
+            int idx = (y2 * w + x) * 3;
+            img.data[idx] = b; img.data[idx+1] = g; img.data[idx+2] = r;
+        }
+    }
+    // draw left and right lines
+    for (int y = ya; y <= yb; ++y) {
+        if (x1 >= 0 && x1 < w) {
+            int idx = (y * w + x1) * 3;
+            img.data[idx] = b; img.data[idx+1] = g; img.data[idx+2] = r;
+        }
+        if (x2 >= 0 && x2 < w) {
+            int idx = (y * w + x2) * 3;
+            img.data[idx] = b; img.data[idx+1] = g; img.data[idx+2] = r;
         }
     }
 }
@@ -50,7 +57,7 @@ void draw_poly(Image& img, const std::vector<std::pair<int, int>>& pts, uint8_t 
         while (true) {
             if (x0 >= 0 && x0 < w && y0 >= 0 && y0 < h) {
                 int idx = (y0 * w + x0) * 3;
-                img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b;
+                img.data[idx] = b; img.data[idx+1] = g; img.data[idx+2] = r;
             }
             if (x0 == x1 && y0 == y1) break;
             int e2 = 2 * err;
@@ -101,16 +108,16 @@ std::vector<BoundingBox> find_bounding_boxes(const Image& binary) {
     return boxes;
 }
 
-// convert rgb image to grayscale (output must have 1 channel)
+// convert bgr image to grayscale (output must have 1 channel)
 void gray_mask(const Image& input, Image& output) {
     int w = input.width;
     int h = input.height;
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             int idx = (y * w + x) * params::color_channel_count;
-            uint8_t r = input.data[idx];
+            uint8_t b = input.data[idx];
             uint8_t g = input.data[idx + 1];
-            uint8_t b = input.data[idx + 2];
+            uint8_t r = input.data[idx + 2];
             // integer approximation of luminosity
             output.data[y * w + x] = (
                 r * params::grayscale_weight_r +
@@ -305,11 +312,27 @@ void convolve(const Image& input, Image& output, const std::vector<int>& kernel,
     }
 }
 
-// convert Image to cv::Mat for display
-cv::Mat image_to_mat(const Image& img) {
-    if (img.channels == 1)
-        return cv::Mat(img.height, img.width, CV_8UC1, (void*)img.data.data()).clone();
-    else if (img.channels == 3)
-        return cv::Mat(img.height, img.width, CV_8UC3, (void*)img.data.data()).clone();
-    throw std::runtime_error("unexpected image channels");
+// convert a packed YUYV (4:2:2) frame to BGR: each 4 bytes (Y0 U Y1 V) give 2 pixels that
+// share U and V. Integer BT.601 conversion, studio range (Y 16-235)
+Image yuyv_to_bgr(const uint8_t* yuyv, int width, int height) {
+    Image img(width, height, params::color_channel_count);
+    auto conv = [](int y, int u, int v) -> std::array<uint8_t, 3> {
+        int c = y - 16, d = u - 128, e = v - 128;
+        int r = std::clamp((298 * c + 409 * e + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
+        int g = std::clamp((298 * c - 100 * d - 208 * e + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
+        int b = std::clamp((298 * c + 516 * d + 128) >> 8, static_cast<int>(params::mask_value_off), static_cast<int>(params::mask_value_on));
+        return {(uint8_t)b, (uint8_t)g, (uint8_t)r};
+    };
+    for (int i = 0, j = 0; i < width * height * 2; i += 4, j += 6) {
+        int y0 = yuyv[i], u = yuyv[i + 1], y1 = yuyv[i + 2], v = yuyv[i + 3];
+        auto bgr0 = conv(y0, u, v);
+        auto bgr1 = conv(y1, u, v);
+        img.data[j] = bgr0[0];
+        img.data[j + 1] = bgr0[1];
+        img.data[j + 2] = bgr0[2];
+        img.data[j + 3] = bgr1[0];
+        img.data[j + 4] = bgr1[1];
+        img.data[j + 5] = bgr1[2];
+    }
+    return img;
 }

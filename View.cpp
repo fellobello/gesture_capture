@@ -6,6 +6,15 @@
 #include "Image_utils.h"
 #include <opencv2/imgproc.hpp>
 #include <sstream>
+#include <stdexcept>
+
+cv::Mat image_to_mat(const Image& img) {
+    if (img.channels == 1)
+        return cv::Mat(img.height, img.width, CV_8UC1, (void*)img.data.data()).clone();
+    else if (img.channels == 3)
+        return cv::Mat(img.height, img.width, CV_8UC3, (void*)img.data.data()).clone();
+    throw std::runtime_error("unexpected image channels");
+}
 
 View::View()
     : debug_enabled_(false), debug_view_index_(0) {}

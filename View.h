@@ -5,6 +5,9 @@
 #include <opencv2/core.hpp>
 #include <string>
 
+// convert Image to cv::Mat for display
+cv::Mat image_to_mat(const Image& img);
+
 class View {
 public:
     View();

@@ -6,8 +6,8 @@
 #define NEW_GESTURE_IMAGE_UTILS_H
 
 #include "Image.h"
+#include <cstdint>
 #include <vector>
-#include <opencv2/highgui.hpp>
 
 // bounding box for a contour (min x/y, width/height)
 struct BoundingBox {
@@ -29,6 +29,7 @@ void history_mask(const Image& motion_mask, Image& history_mask, uint8_t decay_s
 
 void convolve(const Image& input, Image& output, const std::vector<int>& kernel, int ksize, int divisor = 1, int offset = 0);
 
-cv::Mat image_to_mat(const Image& img);
+// convert a packed YUYV (4:2:2) frame to a 3-channel BGR image
+Image yuyv_to_bgr(const uint8_t* yuyv, int width, int height);
 
 #endif //NEW_GESTURE_IMAGE_UTILS_H
