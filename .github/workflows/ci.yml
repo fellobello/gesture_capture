@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenCV
+        run: sudo apt-get update && sudo apt-get install -y libopencv-dev
+
+      - name: Tests (Debug, AddressSanitizer + UBSan)
+        run: |
+          cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug -DGESTURE_SANITIZE=ON
+          cmake --build build-asan -j
+          ctest --test-dir build-asan --output-on-failure
+
+      - name: Release build (webcam app + benchmark)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGESTURE_TESTS=OFF
+          cmake --build build -j
+
+      - name: Benchmark
+        run: ./build/bench_pipeline 300
